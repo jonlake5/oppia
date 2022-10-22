@@ -276,6 +276,54 @@ class AppFeedbackReportDomainTests(test_utils.GenericTestBase):
                 )
             )
 
+    def test_from_submitted_feedback_dict_returns_app_feedback_report(
+            self
+        ) -> None:
+        """Here we are testing that submitting an AndroidFeedbackReportDict
+            returns an AppFeedbackReport object.
+        """
+        android_feedback_dict = self._setup_android_app_feedback_report_dict()
+        app_feedback_report_obj = (
+            app_feedback_report_domain.AppFeedbackReport
+            .from_submitted_feedback_dict(
+                android_feedback_dict
+            )
+        )
+        self.assertIsInstance(
+            app_feedback_report_obj,
+            app_feedback_report_domain.AppFeedbackReport
+        )
+
+    def test_app_feedback_report_validate_with_no_ticket_id(self) -> None:
+        """Here we are testing that AppFeedbackReport.validate completes
+            without a valid ticket ID.
+        """
+        self.android_report_obj.ticket_id = None
+        try:
+            self.android_report_obj.validate()
+        except (utils.ValidationError, NotImplementedError):
+            self.fail(
+                'Running AppFeedbackReport.validate '
+                'without valid ticket ID failed.'
+            )
+
+    def test_require_valid_scrubber_id_exits_with_valid_user_id(self) -> None:
+        """Here we are testing that when we run require_valid_scrubber_id
+            with a valid user, it correctly exits the method.
+        """
+        try:
+            (
+                app_feedback_report_domain
+                .AppFeedbackReport
+                .require_valid_scrubber_id(
+                    feconf.APP_FEEDBACK_REPORT_SCRUBBER_BOT_ID
+                )
+            )
+        except utils.ValidationError:
+            self.fail(
+                'Testing require_valid_scrubber_id with a scrubber_id failed'
+            )
+
     def test_report_web_platform_validation_fails(self) -> None:
         with self.assertRaisesRegex(
             NotImplementedError,
@@ -698,6 +746,52 @@ class UserSuppliedFeedbackDomainTests(test_utils.GenericTestBase):
         self.user_supplied_feedback.category = None # type: ignore[assignment]
         self._assert_validation_error(
             self.user_supplied_feedback, 'No category supplied.')
+
+    class MockCategory:
+        """This is a mock class for Category so when we run
+            require_valid_user_feedback and pass Category.FEATURE_SUGGESTION
+            from the original class, we don't match any items in the allowed
+            list, letting us test going through the entire method and not
+            matching any if statements.
+        """
+
+        class Category(enum.Enum):
+            """Enum for categories."""
+
+            FEATURE_SUGGESTION = 'feature_suggestion_2'
+            LANGUAGE_SUGGESTION = 'language_suggestion'
+            OTHER_SUGGESTION = 'other_suggestion'
+            LESSON_QUESTION_ISSUE = 'lesson_question_issue'
+            LANGUAGE_GENERAL_ISSUE = 'language_general_issue'
+            LANGUAGE_AUDIO_ISSUE = 'language_audio_issue'
+            LANGUAGE_TEXT_ISSUE = 'language_text_issue'
+            TOPICS_ISSUE = 'topics_issue'
+            PROFILE_ISSUE = 'profile_issue'
+            OTHER_ISSUE = 'other_issue'
+            LESSON_PLAYER_CRASH = 'lesson_player_crash'
+            PRACTICE_QUESTIONS_CRASH = 'practice_questions_crash'
+            OPTIONS_PAGE_CRASH = 'options_page_crash'
+            PROFILE_PAGE_CRASH = 'profile_page_crash'
+            OTHER_CRASH = 'other_crash'
+
+    def test_require_valid_user_feedback_items_not_in_list(self) -> None:
+        """Here we are testing that
+            require_valid_user_feedback_items_for_category
+            correctly skips the if statements when no conditions are met.
+        """
+        with self.swap(
+            app_feedback_report_constants,
+            'Category',
+            self.MockCategory.Category
+        ):
+            (
+                app_feedback_report_domain.UserSuppliedFeedback
+                .require_valid_user_feedback_items_for_category(
+                    app_feedback_report_constants.Category.FEATURE_SUGGESTION,
+                    ['hello'],
+                    'other_text_input'
+                )
+            )
 
     def _assert_validation_error(
             self,
