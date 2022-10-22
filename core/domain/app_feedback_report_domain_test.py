@@ -193,6 +193,89 @@ class AppFeedbackReportDomainTests(test_utils.GenericTestBase):
         }
         self.assertDictEqual(expected_dict, self.android_report_obj.to_dict())
 
+    def _setup_android_app_feedback_report_dict(
+            self
+        ) -> app_feedback_report_domain.AndroidFeedbackReportDict:
+        """This sets up and returns an AndroidFeedbackReportDict."""
+        android_system_context_dict = (
+            app_feedback_report_domain.AndroidSystemContextDict(
+            platform_version=ANDROID_PLATFORM_VERSION,
+            package_version_code=1,
+            android_device_country_locale_code=COUNTRY_LOCALE_CODE_INDIA,
+            android_device_language_locale_code=LANGUAGE_LOCALE_CODE_ENGLISH
+            )
+        )
+        android_device_context_dict = (
+            app_feedback_report_domain.AndroidDeviceContextDict(
+                android_device_model=ANDROID_DEVICE_MODEL,
+                android_sdk_version=ANDROID_SDK_VERSION,
+                build_fingerprint=ANDROID_BUILD_FINGERPRINT,
+                network_type=NETWORK_WIFI.value
+            )
+        )
+        android_app_entry_point_dict = (
+                app_feedback_report_domain.EntryPointDict(
+                entry_point_name=ENTRY_POINT_NAVIGATION_DRAWER,
+                entry_point_exploration_id=None,
+                entry_point_story_id=None,
+                entry_point_topic_id=None,
+                entry_point_subtopic_id=None
+            )
+        )
+        android_app_context_dict = (
+            app_feedback_report_domain.AndroidAppContextDict(
+                entry_point=android_app_entry_point_dict,
+                text_language_code=LANGUAGE_LOCALE_CODE_ENGLISH,
+                audio_language_code=LANGUAGE_LOCALE_CODE_ENGLISH,
+                text_size=ANDROID_TEXT_SIZE.value,
+                only_allows_wifi_download_and_update=False,
+                automatically_update_topics=False,
+                account_is_profile_admin=False,
+                event_logs=EVENT_LOGS,
+                logcat_logs=LOGCAT_LOGS
+            )
+        )
+        user_feedback_dict = (
+            self.android_report_obj.user_supplied_feedback.to_dict()
+        )
+        android_app_feedback_report_dict = (
+            app_feedback_report_domain
+            .AndroidFeedbackReportDict(
+                platform_type=PLATFORM_ANDROID,
+                android_report_info_schema_version=(
+                    ANDROID_REPORT_INFO_SCHEMA_VERSION
+                ),
+                app_context=android_app_context_dict,
+                device_context=android_device_context_dict,
+                report_submission_timestamp_sec=(
+                    int(REPORT_SUBMITTED_TIMESTAMP.timestamp())
+                ),
+                report_submission_utc_offset_hrs=5,
+                system_context=android_system_context_dict,
+                user_supplied_feedback=user_feedback_dict
+            )
+        )
+        return android_app_feedback_report_dict
+
+    def test_from_submitted_feedback_dict_not_implemented(self) -> None:
+        """Here we are testing that when submitting an android feedback dict
+            with platform_type not android it raises a NotImplementedError
+            Exception.
+        """
+        android_feedback_dict = self._setup_android_app_feedback_report_dict()
+        android_feedback_dict['platform_type'] = PLATFORM_WEB
+        with self.assertRaisesRegex(
+            NotImplementedError,
+            'Domain objects for web reports must be implemented.'
+        ):
+            (
+                app_feedback_report_domain
+                .AppFeedbackReport
+                .from_submitted_feedback_dict(
+                    android_feedback_dict
+                )
+            )
+
     def test_report_web_platform_validation_fails(self) -> None:
         with self.assertRaisesRegex(
             NotImplementedError,
