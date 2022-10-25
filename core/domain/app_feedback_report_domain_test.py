@@ -25,6 +25,7 @@ from core import feconf
 from core import utils
 from core.domain import app_feedback_report_constants
 from core.domain import app_feedback_report_domain
+from core.domain import exp_domain
 from core.platform import models
 from core.tests import test_utils
 
@@ -750,7 +751,7 @@ class UserSuppliedFeedbackDomainTests(test_utils.GenericTestBase):
     class MockCategory:
         """This is a mock class for Category so when we run
             require_valid_user_feedback and pass Category.FEATURE_SUGGESTION
-            from the original class, we don't match any items in the allowed
+            from the original class, we won't match any items in the allowed
             list, letting us test going through the entire method and not
             matching any if statements.
         """
@@ -792,6 +793,36 @@ class UserSuppliedFeedbackDomainTests(test_utils.GenericTestBase):
                     'other_text_input'
                 )
             )
+
+    def test_require_items(self) -> None:
+        """We are testing that when a list of string
+        is passed it completes iterations of the method.
+        """
+        try:
+            int_list = ['abc', 'def']
+            (
+                app_feedback_report_domain
+                .UserSuppliedFeedback
+                .require_valid_selected_items_for_category(int_list)
+            )
+        except utils.ValidationError:
+            self.fail(
+                'UserFeedback.require_valid_selected_items_for_category failed.'
+            )
+
+    def test_require_valid_selected_items_empty(self) -> None:
+        """We are testing that when an empty list is passed
+            it correctly exits the method.
+        """
+        empty_list: List[str] = []
+        try:
+            (
+                app_feedback_report_domain
+                .UserSuppliedFeedback
+                .require_valid_selected_items_for_category(empty_list)
+            )
+        except utils.ValidationError:
+            self.fail('UserFeedback.require_valid_selected_items failed')
 
     def _assert_validation_error(
             self,
@@ -1066,6 +1097,25 @@ class EntryPointDomainTests(test_utils.GenericTestBase):
             'Subclasses of EntryPoint should implement their own validation'):
             self.entry_point.validate()
 
+    def test_require_valid_entry_point_exits_correctly(self) -> None:
+        exp_id = 'exp_id'
+        exp_obj = exp_domain.Exploration.create_default_exploration(
+            exp_id
+        )
+        try:
+            (
+                app_feedback_report_domain
+                .EntryPoint
+                .require_valid_entry_point_exploration(
+                    exp_obj.id,
+                    None
+                )
+            )
+        except utils.ValidationError:
+            self.fail(
+                'EntryPoint.require_valid_entry_point_exploration failed.'
+            )
+
 
 class NavigationDrawerEntryPointDomainTests(test_utils.GenericTestBase):
 
@@ -1263,6 +1313,14 @@ class RevisionCardEntryPointDomainTests(test_utils.GenericTestBase):
         self.entry_point.subtopic_id = 'invalid_subtopic_id'
         self._assert_validation_error(
             self.entry_point, 'Expected subtopic id to be an int')
+
+    def test_validate_completes_successfully(self) -> None:
+        self.entry_point.topic_id = 'valid_topic1'
+        self.entry_point.subtopic_id = 'abc'
+        try:
+            self.entry_point.validate()
+        except utils.ValidationError:
+            self.fail('RevisionCardEntryPoint.validate() failed')
 
     def _assert_validation_error(
             self,
@@ -1649,9 +1707,21 @@ class AppFeedbackReportTicketDomainTests(test_utils.GenericTestBase):
     # inputs that we can normally catch by typing.
     def test_validation_archived_is_not_boolean_fails(self) -> None:
         self.ticket_obj.archived = 123 # type: ignore[assignment]
+        self.ticket_obj.github_issue_number = 123
         self._assert_validation_error(
             self.ticket_obj,
             'The ticket archived status must be a boolean')
+
+    def test_require_valid_github_repo_completes(self) -> None:
+        self.ticket_obj.github_issue_repo_name = 'android'
+        try:
+            self.ticket_obj.require_valid_github_repo(
+                self.ticket_obj.github_issue_repo_name
+            )
+        except utils.ValidationError:
+            self.fail(
+                'AppFeedbackReportTicket.require_valid_github_repo failed.'
+            )
 
     def _assert_validation_error(
             self,
@@ -1939,6 +2009,12 @@ class AppFeedbackReportFilterDomainTests(test_utils.GenericTestBase):
         self._assert_validation_error(
             self.filter,
             'The filter options should be a list')
+
+    def test_validation_filter_completes(self) -> None:
+        try:
+            self.filter.validate()
+        except utils.ValidationError:
+            self.fail('AppFeedbackReportFilter.validate() failed.')
 
     def _assert_validation_error(
             self,

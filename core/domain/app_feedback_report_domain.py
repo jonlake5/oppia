@@ -1456,7 +1456,7 @@ class RevisionCardEntryPoint(EntryPoint):
         Args:
             topic_id: str. The unique ID for the current topic the user is
                 reviewing when intiating the report.
-            subtopic_id: int. The ID for the current subtopic the user is
+            subtopic_id: str. The ID for the current subtopic the user is
                 reviewing when intiating the report.
         """
         super().__init__(
