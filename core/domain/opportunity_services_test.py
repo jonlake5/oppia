@@ -23,6 +23,7 @@ import logging
 from core import feconf
 from core.constants import constants
 from core.domain import exp_domain
+from core.domain import exp_fetchers
 from core.domain import exp_services
 from core.domain import opportunity_domain
 from core.domain import opportunity_services
@@ -31,11 +32,13 @@ from core.domain import skill_domain
 from core.domain import skill_services
 from core.domain import state_domain
 from core.domain import story_domain
+from core.domain import story_fetchers
 from core.domain import story_services
 from core.domain import subtopic_page_domain
 from core.domain import subtopic_page_services
 from core.domain import suggestion_services
 from core.domain import topic_domain
+from core.domain import topic_fetchers
 from core.domain import topic_services
 from core.domain import user_services
 from core.platform import models
@@ -876,6 +879,67 @@ class OpportunityServicesUnitTest(test_utils.GenericTestBase):
                 'new_value': '0'
             })], 'Changes.')
 
+    def test_create_exp_oppor_summary_lang_code_not_incomplete(self) -> None:
+        """Here we are testing that when creating an exploration
+            opportunity summary, it completes when the exploration
+            language is not in the incomplete_langue_code list and
+            returns an ExplorationOpportunitySummary object.
+        """
+        topic = topic_fetchers.get_topic_by_id(self.TOPIC_ID)
+        story = story_fetchers.get_story_by_id(self.STORY_ID)
+        exp = exp_fetchers.get_exploration_by_id('0')
+        exp.language_code = 'abcde'
+        opp_summary = opportunity_services.create_exp_opportunity_summary(
+            topic,
+            story,
+            exp
+        )
+        self.assertIsInstance(
+            opp_summary,
+            opportunity_domain.ExplorationOpportunitySummary
+        )
+
+    def test_update_exploration_voiceover_opportunities(self) -> None:
+        """Here we are testing that when we update the exploration
+        voiceover opportunity that it removes the language needing
+        voice artist.
+        """
+        exp_id = 'exp_2'
+        lang = 'ar'
+        initial_list = [lang]
+        expected_list: List[str] = []
+        opportunity_models.ExplorationOpportunitySummaryModel(
+            id=exp_id,
+            topic_id='topic_id',
+            topic_name='topic_name',
+            story_id='story_id',
+            story_title='story_title',
+            chapter_title='chapter_title',
+            content_count=1,
+            language_codes_needing_voice_artists=[lang]
+        ).put()
+        model = (
+            opportunity_models.ExplorationOpportunitySummaryModel.get(exp_id)
+        )
+        exploration_opportunity_summary = (
+            opportunity_services
+            .get_exploration_opportunity_summary_from_model(model)
+        )
+        self.assertEqual(
+            exploration_opportunity_summary
+            .language_codes_needing_voice_artists,
+            initial_list
+        )
+        opportunity_services.update_exploration_voiceover_opportunities(
+            exp_id,
+            lang
+        )
+        self.assertEqual(
+            exploration_opportunity_summary
+            .language_codes_needing_voice_artists,
+            expected_list
+        )
+
     def test_get_exploration_opportunity_summaries_by_ids(self) -> None:
         output = (
             opportunity_services.get_exploration_opportunity_summaries_by_ids(
@@ -977,6 +1041,28 @@ class OpportunityServicesUnitTest(test_utils.GenericTestBase):
                 'opportunity model with id 0'
             )
 
+    def test_get_exploration_opportunity_summary_by_id_return_object(
+        self
+    ) -> None:
+        exp_id = 'exp_2'
+        lang = 'ar'
+        opportunity_models.ExplorationOpportunitySummaryModel(
+            id=exp_id,
+            topic_id='topic_id',
+            topic_name='topic_name',
+            story_id='story_id',
+            story_title='story_title',
+            chapter_title='chapter_title',
+            content_count=1,
+            language_codes_needing_voice_artists=[lang]
+        ).put()
+        self.assertIsInstance(
+            opportunity_services.get_exploration_opportunity_summary_by_id(
+                exp_id
+            ),
+            opportunity_domain.ExplorationOpportunitySummary
+        )
+
     def test_get_exploration_opportunity_summary_by_id_for_none_result(
         self
     ) -> None:
@@ -1020,6 +1106,90 @@ class OpportunityServicesUnitTest(test_utils.GenericTestBase):
             opportunity_models.ExplorationOpportunitySummaryModel.get(
                 'exp_2', strict=False
             )
+        )
+
+    def test_regenerate_opportunities_delete_existing(self) -> None:
+        self.assertEqual(
+            opportunity_services.regenerate_opportunities_related_to_topic(
+                self.TOPIC_ID,
+                True
+            ),
+            1
+        )
+
+    def test_regnerate_opportunites_related_to_topic_with_story(self) -> None:
+        """Here we are testing that when we regenerate opportunities
+        related to topic with story that it returns the correct amount
+        of opportunities.
+        """
+        self.assertEqual(
+            opportunity_services.regenerate_opportunities_related_to_topic(
+                self.TOPIC_ID
+            ),
+            1
+        )
+        self.save_new_valid_exploration(
+            '10',
+            self.owner_id,
+            title='title 10',
+            category=constants.ALL_CATEGORIES[0],
+            end_state_name='End State',
+            correctness_feedback_enabled=True
+        )
+        self.publish_exploration(self.owner_id, '10')
+        story_services.update_story(
+            self.owner_id, self.STORY_ID, [story_domain.StoryChange({
+                'cmd': 'add_story_node',
+                'node_id': 'node_2',
+                'title': 'Node2',
+            }), story_domain.StoryChange({
+                'cmd': 'update_story_node_property',
+                'property_name': 'exploration_id',
+                'node_id': 'node_2',
+                'old_value': None,
+                'new_value': '10'
+            })], 'Changes.')
+        self.assertEqual(
+            opportunity_services.regenerate_opportunities_related_to_topic(
+                self.TOPIC_ID
+            ),
+            2
+        )
+
+    def test_voiceover_opportunities(self) -> None:
+        (opportunities, _, _) = (
+            opportunity_services.get_voiceover_opportunities(
+                'en',
+                None
+            )
+        )
+        self.assertIsInstance(
+            opportunities[0],
+            opportunity_domain.ExplorationOpportunitySummary
+        )
+        self.assertEqual(len(opportunities), 1)
+
+    def test_get_skill_opportunities_by_ids_returns_none_or_skill_opportunity(
+        self
+    ) -> None:
+        expected_dict_1 = {
+            'skill_id_1': None
+        }
+        skill_opportunity = (
+            opportunity_services.get_skill_opportunities_by_ids(
+                ['skill_id_1']
+            )
+        )
+        self.assertDictEqual(skill_opportunity, expected_dict_1)
+        opportunity_services.create_skill_opportunity(
+            'skill_id_2',
+            'skill_description_2'
+        )
+        skill_opportunity = opportunity_services.get_skill_opportunities_by_ids(
+            ['skill_id_2']
+        )
+        self.assertIsNotNone(
+            skill_opportunity['skill_id_2']
         )
 
     def test_regenerate_opportunities_related_to_topic_when_story_deleted(
